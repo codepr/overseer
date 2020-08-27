@@ -11,7 +11,7 @@ type ServerStats struct {
 	Alive              bool
 	MovingAverageStats *MovingAverage
 	LatestResponseTime time.Duration
-	ResponseStatus     string
+	ResponseStatusMap  map[int]int
 }
 
 type Agent struct {
@@ -27,7 +27,7 @@ func NewAgent(urls []string, windowSize int, interval time.Duration) *Agent {
 			false,
 			NewMovingAverage(windowSize),
 			0,
-			"",
+			map[int]int{},
 		}
 
 	}
@@ -45,10 +45,10 @@ func (a *Agent) Run() {
 	go func() {
 		for {
 			stats := <-statsChannel
-			fmt.Printf("%s alive=%v res(ms)=%v min(ms)=%v max(ms)=%v avg(ms)=%v\n",
+			fmt.Printf("%s alive=%v res(ms)=%v min(ms)=%v max(ms)=%v avg(ms)=%v status_codes=%v\n",
 				stats.Url, stats.Alive, stats.LatestResponseTime,
 				stats.MovingAverageStats.Min(), stats.MovingAverageStats.Max(),
-				stats.MovingAverageStats.Mean())
+				stats.MovingAverageStats.Mean(), stats.ResponseStatusMap)
 		}
 	}()
 
@@ -73,7 +73,7 @@ func probeServer(serverChan <-chan *ServerStats, statsChan chan<- *ServerStats, 
 			elapsed := time.Since(start)
 			if err == nil {
 				stats.Alive = true
-				stats.ResponseStatus = res.Status
+				stats.ResponseStatusMap[res.StatusCode] += 1
 			}
 			stats.LatestResponseTime = elapsed
 			stats.MovingAverageStats.Put(elapsed)
