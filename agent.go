@@ -12,6 +12,7 @@ type ServerStats struct {
 	MovingAverageStats *MovingAverage
 	LatestResponseTime time.Duration
 	ResponseStatusMap  map[int]int
+	Availability       float64
 }
 
 type Agent struct {
@@ -28,6 +29,7 @@ func NewAgent(urls []string, windowSize int, interval time.Duration) *Agent {
 			NewMovingAverage(windowSize),
 			0,
 			map[int]int{},
+			0.0,
 		}
 
 	}
@@ -45,10 +47,11 @@ func (a *Agent) Run() {
 	go func() {
 		for {
 			stats := <-statsChannel
-			fmt.Printf("%s alive=%v res(ms)=%v min(ms)=%v max(ms)=%v avg(ms)=%v status_codes=%v\n",
-				stats.Url, stats.Alive, stats.LatestResponseTime,
-				stats.MovingAverageStats.Min(), stats.MovingAverageStats.Max(),
-				stats.MovingAverageStats.Mean(), stats.ResponseStatusMap)
+			fmt.Printf("%s alive=%v avail.(%%)=%.2f res(ms)=%v min(ms)=%v max(ms)=%v avg(ms)=%v status_codes=%v\n",
+				stats.Url, stats.Alive, stats.Availability,
+				stats.LatestResponseTime, stats.MovingAverageStats.Min(),
+				stats.MovingAverageStats.Max(), stats.MovingAverageStats.Mean(),
+				stats.ResponseStatusMap)
 		}
 	}()
 
@@ -74,7 +77,21 @@ func probeServer(serverChan <-chan *ServerStats, statsChan chan<- *ServerStats, 
 			if err == nil {
 				stats.Alive = true
 				stats.ResponseStatusMap[res.StatusCode] += 1
+			} else {
+				stats.Alive = false
+				stats.ResponseStatusMap[500] += 1
 			}
+			// Retrieve availability ratio % by counting error codes and
+			// valid codes
+			validCodes, errorCodes := 0, 0
+			for k, v := range stats.ResponseStatusMap {
+				if k > 400 {
+					errorCodes += v
+				} else {
+					validCodes += v
+				}
+			}
+			stats.Availability = float64(validCodes*100.0) / float64((validCodes + errorCodes))
 			stats.LatestResponseTime = elapsed
 			stats.MovingAverageStats.Put(elapsed)
 			statsChan <- stats
