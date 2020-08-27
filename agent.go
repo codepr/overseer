@@ -1,7 +1,9 @@
 package overseer
 
 import (
-	"fmt"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"time"
 )
@@ -18,9 +20,42 @@ type ServerStats struct {
 type Agent struct {
 	servers  []*ServerStats
 	interval time.Duration
+	timeout  time.Duration
 }
 
-func NewAgent(urls []string, windowSize int, interval time.Duration) *Agent {
+type conf struct {
+	Agent struct {
+		Servers    []string      `yaml:"servers"`
+		Interval   time.Duration `yaml:"interval"`
+		Timeout    time.Duration `yaml:"timeout"`
+		WindowSize int           `yaml:"window_size"`
+	} `yaml:"agent"`
+}
+
+func loadConf(path string) (*conf, error) {
+	config := &conf{}
+	yamlFile, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	err = yaml.Unmarshal(yamlFile, config)
+	if err != nil {
+		return nil, err
+	}
+	return config, nil
+}
+
+func NewAgentFromConfig(path string) (*Agent, error) {
+	conf, err := loadConf(path)
+	if err != nil {
+		return nil, err
+	}
+	agent := NewAgent(conf.Agent.Servers, conf.Agent.WindowSize,
+		conf.Agent.Interval, conf.Agent.Timeout)
+	return agent, nil
+}
+
+func NewAgent(urls []string, windowSize int, interval, timeout time.Duration) *Agent {
 	servers := make([]*ServerStats, len(urls))
 	for i, url := range urls {
 		servers[i] = &ServerStats{
@@ -35,7 +70,8 @@ func NewAgent(urls []string, windowSize int, interval time.Duration) *Agent {
 	}
 	return &Agent{
 		servers:  servers,
-		interval: interval * time.Millisecond,
+		interval: interval,
+		timeout:  timeout,
 	}
 }
 
@@ -44,10 +80,18 @@ func (a *Agent) Run() {
 	statsChannel := make(chan *ServerStats)
 	stopChannel := make(chan interface{})
 
+	log.Println("Monitoring agent starting")
+	log.Printf("Refresh interval: %v\n", a.interval)
+	log.Printf("Request timeout: %v\n", a.timeout)
+	log.Println("Monitoring servers:")
+	for _, server := range a.servers {
+		log.Printf("  - %v\n", server.Url)
+	}
+
 	go func() {
 		for {
 			stats := <-statsChannel
-			fmt.Printf("%s alive=%v avail.(%%)=%.2f res(ms)=%v min(ms)=%v max(ms)=%v avg(ms)=%v status_codes=%v\n",
+			log.Printf("%s alive=%v avail.(%%)=%.2f res(ms)=%v min(ms)=%v max(ms)=%v avg(ms)=%v status_codes=%v\n",
 				stats.Url, stats.Alive, stats.Availability,
 				stats.LatestResponseTime, stats.MovingAverageStats.Min(),
 				stats.MovingAverageStats.Max(), stats.MovingAverageStats.Mean(),
@@ -63,7 +107,7 @@ func (a *Agent) Run() {
 		for _, server := range a.servers {
 			serverChannel <- server
 		}
-		time.Sleep(5000 * time.Millisecond)
+		time.Sleep(a.interval)
 	}
 }
 
