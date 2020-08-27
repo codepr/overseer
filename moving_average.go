@@ -1,26 +1,32 @@
-package main
+package overseer
+
+import "time"
 
 type MovingAverage struct {
 	Size  int
-	items []float64
+	items []time.Duration
 }
 
-func (ma *MovingAverage) Put(item float64) {
+func NewMovingAverage(size int) *MovingAverage {
+	return &MovingAverage{size, []time.Duration{}}
+}
+
+func (ma *MovingAverage) Put(item time.Duration) {
 	ma.items = append(ma.items, item)
 	if len(ma.items) > ma.Size {
 		_, ma.items = ma.items[0], ma.items[1:]
 	}
 }
 
-func (ma *MovingAverage) Mean() float64 {
-	var sum float64 = 0.0
+func (ma *MovingAverage) Mean() time.Duration {
+	var sum time.Duration = 0.0
 	for _, value := range ma.items {
 		sum += value
 	}
-	return sum / float64(len(ma.items))
+	return sum / time.Duration(len(ma.items))
 }
 
-func (ma *MovingAverage) Max() float64 {
+func (ma *MovingAverage) Max() time.Duration {
 	if len(ma.items) == 0 {
 		return 0.0
 	}
@@ -33,7 +39,7 @@ func (ma *MovingAverage) Max() float64 {
 	return max
 }
 
-func (ma *MovingAverage) Min() float64 {
+func (ma *MovingAverage) Min() time.Duration {
 	if len(ma.items) == 0 {
 		return 0.0
 	}

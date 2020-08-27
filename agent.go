@@ -1,4 +1,4 @@
-package main
+package overseer
 
 import (
 	"fmt"
@@ -9,52 +9,77 @@ import (
 type ServerStats struct {
 	Url                string
 	Alive              bool
+	MovingAverageStats *MovingAverage
 	LatestResponseTime time.Duration
 	ResponseStatus     string
 }
 
-func probeServer(serverChan <-chan string, statsChan chan<- *ServerStats, stopChan <-chan interface{}) {
-	for {
-		select {
-		case server := <-serverChan:
-			stats := &ServerStats{server, false, 0, ""}
-			start := time.Now()
-			res, err := http.Get(server)
-			elapsed := time.Since(start)
-			if err == nil {
-				stats.Alive = true
-				stats.ResponseStatus = res.Status
-			}
-			stats.LatestResponseTime = elapsed
-			statsChan <- stats
-		case <-stopChan:
-			break
+type Agent struct {
+	servers  []*ServerStats
+	interval time.Duration
+}
+
+func NewAgent(urls []string, windowSize int, interval time.Duration) *Agent {
+	servers := make([]*ServerStats, len(urls))
+	for i, url := range urls {
+		servers[i] = &ServerStats{
+			url,
+			false,
+			NewMovingAverage(windowSize),
+			0,
+			"",
 		}
+
+	}
+	return &Agent{
+		servers:  servers,
+		interval: interval * time.Millisecond,
 	}
 }
 
-func main() {
-	servers := []string{"http://localhost:7892", "http://localhost:9898"}
-	serverChannel := make(chan string)
+func (a *Agent) Run() {
+	serverChannel := make(chan *ServerStats)
 	statsChannel := make(chan *ServerStats)
 	stopChannel := make(chan interface{})
 
 	go func() {
 		for {
 			stats := <-statsChannel
-			fmt.Printf("%v\n", stats)
+			fmt.Printf("%s alive=%v res(ms)=%v min(ms)=%v max(ms)=%v avg(ms)=%v\n",
+				stats.Url, stats.Alive, stats.LatestResponseTime,
+				stats.MovingAverageStats.Min(), stats.MovingAverageStats.Max(),
+				stats.MovingAverageStats.Mean())
 		}
 	}()
 
-	for range servers {
+	for range a.servers {
 		go probeServer(serverChannel, statsChannel, stopChannel)
 	}
 
 	for {
-		for _, server := range servers {
+		for _, server := range a.servers {
 			serverChannel <- server
 		}
 		time.Sleep(5000 * time.Millisecond)
 	}
+}
 
+func probeServer(serverChan <-chan *ServerStats, statsChan chan<- *ServerStats, stopChan <-chan interface{}) {
+	for {
+		select {
+		case stats := <-serverChan:
+			start := time.Now()
+			res, err := http.Get(stats.Url)
+			elapsed := time.Since(start)
+			if err == nil {
+				stats.Alive = true
+				stats.ResponseStatus = res.Status
+			}
+			stats.LatestResponseTime = elapsed
+			stats.MovingAverageStats.Put(elapsed)
+			statsChan <- stats
+		case <-stopChan:
+			break
+		}
+	}
 }
