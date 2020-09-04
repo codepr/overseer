@@ -1,4 +1,4 @@
-package overseer
+package backend
 
 import "time"
 
@@ -19,6 +19,9 @@ func (ma *MovingAverage) Put(item time.Duration) {
 }
 
 func (ma *MovingAverage) Mean() time.Duration {
+	if len(ma.items) == 0 {
+		return 0.0
+	}
 	var sum time.Duration = 0.0
 	for _, value := range ma.items {
 		sum += value

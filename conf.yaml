@@ -1,6 +1,6 @@
 agent:
   servers:
-    - "http://localhost:7892"
+    - "http://localhost:9899"
     - "http://localhost:9898"
   timeout: 5000ms
   interval: 5000ms

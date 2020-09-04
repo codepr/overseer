@@ -1,11 +1,11 @@
 package main
 
 import (
-	. "github.com/codepr/overseer"
+	"github.com/codepr/overseer/agent"
 )
 
 func main() {
-	agent, err := NewAgentFromConfig("./conf.yaml")
+	agent, err := agent.NewFromConfig("./conf.yaml")
 	if err != nil {
 		panic(err)
 	}
