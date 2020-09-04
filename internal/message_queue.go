@@ -24,17 +24,23 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Package internal contains all utilities and inner library features, not
+// meant to be exported outside for the client
 package internal
 
 import (
 	"github.com/streadway/amqp"
 )
 
+// ProducerConsumer defines the behavior of a simple message queue, it's
+// expected to provide a `Produce` function and a `Consume` one.
 type ProducerConsumer interface {
 	Produce([]byte) error
 	Consume(chan []byte) error
 }
 
+// AAmqpQueue is a `ProducerConsumer` that uses RabbitMQ as backend for
+// communicating
 type AmqpQueue struct {
 	url, queue                               string
 	durable, deleteUnused, exclusive, noWait bool
@@ -52,8 +58,6 @@ func NewAmqpQueue(url, queueName string, opts ...QueueOption) *AmqpQueue {
 	}
 	return q
 }
-
-// "amqp://guest:guest@localhost:5672/"
 
 func (q AmqpQueue) Produce(item []byte) error {
 	conn, err := amqp.Dial(q.url)

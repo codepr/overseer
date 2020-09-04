@@ -1,3 +1,31 @@
+// BSD 2-Clause License
+//
+// Copyright (c) 2020, Andrea Giacomo Baldan
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// * Redistributions of source code must retain the above copyright notice, this
+//   list of conditions and the following disclaimer.
+//
+// * Redistributions in binary form must reproduce the above copyright notice,
+//   this list of conditions and the following disclaimer in the documentation
+//   and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+// Package backend contains all backend related modules and utilies to perform
+// aggregations and analysis of incoming server statistics
 package backend
 
 import (
@@ -9,7 +37,10 @@ import (
 	. "github.com/codepr/overseer/internal"
 )
 
-type ServerStats struct {
+// serverStats act as simple ephemeral state for each probed URL server,
+// tracking its status, availability and some stats like the moving average
+// over last N points
+type serverStats struct {
 	Alive              bool
 	MovingAverageStats *MovingAverage
 	LatestResponseTime time.Duration
@@ -17,22 +48,27 @@ type ServerStats struct {
 	Availability       float64
 }
 
+// Aggregator performs some aggregation on incoming records from a message queue
+// tracking the states on a map
 type Aggregator struct {
-	servers    map[URL]*ServerStats
+	servers    map[URL]*serverStats
 	windowSize int
 	mq         ProducerConsumer
 	logger     *log.Logger
 }
 
+// NewAggregator create a new `Aggregator` object
 func NewAggregator() *Aggregator {
 	return &Aggregator{
-		servers:    make(map[URL]*ServerStats),
+		servers:    make(map[URL]*serverStats),
 		windowSize: 120,
 		mq:         NewAmqpQueue("amqp://guest:guest@localhost:5672/", "urlstatus"),
 		logger:     log.New(os.Stdout, "aggregator: ", log.LstdFlags),
 	}
 }
 
+// Run start the consume process from the message queue and aggregation of
+// incoming records
 func (a *Aggregator) Run() error {
 	events := make(chan []byte)
 	urls := make(chan URL)
@@ -69,11 +105,13 @@ func (a *Aggregator) Run() error {
 	return a.mq.Consume(events)
 }
 
+// Perform some aggregations by adding new received records to previous history
+// for a given URL
 func (a *Aggregator) aggregate(status *ServerStatus) {
 	// Check if the URL is already mapped, add a new `ServerStats` pointer
 	// if empty
 	if stats, ok := a.servers[status.Url]; !ok {
-		a.servers[status.Url] = &ServerStats{
+		a.servers[status.Url] = &serverStats{
 			false,
 			NewMovingAverage(a.windowSize),
 			0,
