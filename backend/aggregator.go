@@ -29,9 +29,12 @@
 package backend
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	. "github.com/codepr/overseer/internal"
@@ -72,35 +75,52 @@ func NewAggregator() *Aggregator {
 func (a *Aggregator) Run() error {
 	events := make(chan []byte)
 	urls := make(chan URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-signalCh
+		cancel()
+		os.Exit(1)
+	}()
 
 	// Run an event listener goroutine, compute aggregation on `ServerStatus`
 	// events coming from the message queue
-	go func() {
+	go func(ctx context.Context) {
 		for {
-			event := <-events
-			var status ServerStatus
-			err := json.Unmarshal(event, &status)
-			if err != nil {
-				a.logger.Println("Error decoding status event")
-			} else {
-				a.aggregate(&status)
-				urls <- status.Url
+			select {
+			case event := <-events:
+				var status ServerStatus
+				err := json.Unmarshal(event, &status)
+				if err != nil {
+					a.logger.Println("Error decoding status event")
+				} else {
+					a.aggregate(&status)
+					urls <- status.Url
+				}
+			case <-ctx.Done():
+				return
 			}
 		}
-	}()
+	}(ctx)
 
 	// Just print results of aggreation fo each received URL
-	go func() {
+	go func(ctx context.Context) {
 		for {
-			url := <-urls
-			stats, _ := a.servers[url]
-			a.logger.Printf("%s alive=%v avail.(%%)=%.2f res(ms)=%v min(ms)=%v max(ms)=%v avg(ms)=%v status_codes=%v\n",
-				url, stats.Alive, stats.Availability,
-				stats.LatestResponseTime, stats.MovingAverageStats.Min(),
-				stats.MovingAverageStats.Max(), stats.MovingAverageStats.Mean(),
-				stats.ResponseStatusMap)
+			select {
+			case url := <-urls:
+				stats, _ := a.servers[url]
+				a.logger.Printf("%s alive=%v avail.(%%)=%.2f res(ms)=%v min(ms)=%v max(ms)=%v avg(ms)=%v status_codes=%v\n",
+					url, stats.Alive, stats.Availability,
+					stats.LatestResponseTime, stats.MovingAverageStats.Min(),
+					stats.MovingAverageStats.Max(), stats.MovingAverageStats.Mean(),
+					stats.ResponseStatusMap)
+			case <-ctx.Done():
+				return
+			}
 		}
-	}()
+	}(ctx)
 
 	return a.mq.Consume(events)
 }
