@@ -38,6 +38,7 @@ import (
 	"time"
 
 	. "github.com/codepr/overseer/internal"
+	"github.com/codepr/overseer/internal/messaging"
 )
 
 // serverStats act as simple ephemeral state for each probed URL server,
@@ -56,26 +57,30 @@ type serverStats struct {
 type Aggregator struct {
 	servers    map[URL]*serverStats
 	windowSize int
-	mq         ProducerConsumer
+	mq         messaging.MessageQueue
 	logger     *log.Logger
 }
 
 // NewAggregator create a new `Aggregator` object
 func NewAggregator() *Aggregator {
+	mq, _ := messaging.Connect("amqp://guest:guest@localhost:5672/")
 	return &Aggregator{
 		servers:    make(map[URL]*serverStats),
 		windowSize: 120,
-		mq:         NewAmqpQueue("amqp://guest:guest@localhost:5672/", "urlstatus"),
+		mq:         mq,
 		logger:     log.New(os.Stdout, "aggregator: ", log.LstdFlags),
 	}
 }
 
 // Run start the consume process from the message queue and aggregation of
 // incoming records
-func (a *Aggregator) Run() error {
+func (a *Aggregator) Run() {
 	events := make(chan []byte)
 	urls := make(chan URL)
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// Catch SIGINT/SIGTERM signals and call cancel() before exiting to
+	// gracefully stop goroutines
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
 
@@ -100,6 +105,7 @@ func (a *Aggregator) Run() error {
 					urls <- status.Url
 				}
 			case <-ctx.Done():
+				a.mq.Close()
 				return
 			}
 		}
@@ -122,7 +128,9 @@ func (a *Aggregator) Run() error {
 		}
 	}(ctx)
 
-	return a.mq.Consume(events)
+	if err := a.mq.Consume("urlstatus", 1, events); err != nil {
+		a.logger.Fatal(err)
+	}
 }
 
 // Perform some aggregations by adding new received records to previous history
@@ -139,6 +147,7 @@ func (a *Aggregator) aggregate(status *ServerStatus) {
 			0.0,
 		}
 	} else {
+		stats.Alive = status.Alive
 		stats.ResponseStatusMap[status.ResponseStatus] += 1
 		// Retrieve availability ratio % by counting error codes and
 		// valid codes

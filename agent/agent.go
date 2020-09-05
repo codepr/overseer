@@ -42,6 +42,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	. "github.com/codepr/overseer/internal"
+	"github.com/codepr/overseer/internal/messaging"
 )
 
 // Agent is responsible for probing a list of URLs once every `interval`
@@ -54,7 +55,8 @@ type Agent struct {
 	urls     []URL
 	interval time.Duration
 	timeout  time.Duration
-	mq       ProducerConsumer
+	queue    string
+	mq       messaging.MessageQueue
 	logger   *log.Logger
 }
 
@@ -98,19 +100,20 @@ func NewFromConfig(path string) (*Agent, error) {
 		return nil, err
 	}
 	// Create a new message queue
-	mq := NewAmqpQueue(conf.Agent.AmqpAddr, conf.Agent.QueueName)
+	mq, _ := messaging.Connect(conf.Agent.AmqpAddr)
 	agent := New(conf.Agent.Servers, conf.Agent.WindowSize,
-		conf.Agent.Interval, conf.Agent.Timeout, mq)
+		conf.Agent.Interval, conf.Agent.Timeout, conf.Agent.QueueName, mq)
 	return agent, nil
 }
 
 // New create a new `Agent` and return a pointer to it
 func New(urls []URL, windowSize int, interval,
-	timeout time.Duration, mq ProducerConsumer) *Agent {
+	timeout time.Duration, queue string, mq messaging.MessageQueue) *Agent {
 	return &Agent{
 		urls:     urls,
 		interval: interval,
 		timeout:  timeout,
+		queue:    queue,
 		mq:       mq,
 		logger:   log.New(os.Stdout, "agent: ", log.LstdFlags),
 	}
@@ -147,10 +150,11 @@ func (a *Agent) Run() {
 						a.logger.Println("Error encoding status")
 						continue
 					}
-					if err := a.mq.Produce(payload); err != nil {
+					if err := a.mq.Produce(a.queue, payload); err != nil {
 						a.logger.Println("Error producing status to queue")
 					}
 				case <-ctx.Done():
+					a.mq.Close()
 					return
 				}
 			}
