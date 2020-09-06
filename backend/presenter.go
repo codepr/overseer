@@ -30,6 +30,7 @@
 package backend
 
 import (
+	"html/template"
 	"log"
 	"net/http"
 
@@ -66,6 +67,24 @@ func wsEndpoint(events <-chan []byte) http.HandlerFunc {
 	}
 }
 
+func home() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Allow only GET requests
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		tpl, err := template.ParseFiles("frontend/stats.html")
+		if err != nil {
+			log.Fatalln(err)
+		}
+		err = tpl.Execute(w, nil)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
 // Run start consuming the RabbitMQ and run the HTTP server serving `ws_stats`
 // as the only route available
 func Run(listenAddr, queueAddr, queueName string) {
@@ -78,6 +97,7 @@ func Run(listenAddr, queueAddr, queueName string) {
 
 	// Add websocket route
 	http.HandleFunc("/ws_stats", wsEndpoint(events))
+	http.HandleFunc("/", home())
 
 	// Consume records from RabbitMQ pushing them to `events` channel
 	go func() {
