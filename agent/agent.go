@@ -64,12 +64,11 @@ type Agent struct {
 // defined settings read from yaml file on the filesystem
 type conf struct {
 	Agent struct {
-		Servers    []URL         `yaml:"servers"`
-		Interval   time.Duration `yaml:"interval"`
-		Timeout    time.Duration `yaml:"timeout"`
-		WindowSize int           `yaml:"window_size"`
-		AmqpAddr   string        `yaml:"amqp_addr,omitempty"`
-		QueueName  string        `yaml:"queue_name,omitempty"`
+		Servers   []URL         `yaml:"servers"`
+		Interval  time.Duration `yaml:"interval"`
+		Timeout   time.Duration `yaml:"timeout"`
+		AmqpAddr  string        `yaml:"amqp_addr,omitempty"`
+		QueueName string        `yaml:"queue_name,omitempty"`
 	} `yaml:"agent"`
 }
 
@@ -101,14 +100,30 @@ func NewFromConfig(path string) (*Agent, error) {
 	}
 	// Create a new message queue
 	mq, _ := messaging.Connect(conf.Agent.AmqpAddr)
-	agent := New(conf.Agent.Servers, conf.Agent.WindowSize,
-		conf.Agent.Interval, conf.Agent.Timeout, conf.Agent.QueueName, mq)
+	agent := New(conf.Agent.Servers, conf.Agent.Interval,
+		conf.Agent.Timeout, conf.Agent.QueueName, mq)
 	return agent, nil
 }
 
+// NewFromEnv create a new `agent` by reading values from environment
+func NewFromEnv() (*Agent, error) {
+	mq, err := messaging.Connect(GetEnv("QUEUE_ADDR", "amqp://guest:guest@localhost:5672/"))
+	if err != nil {
+		return nil, err
+	}
+	return &Agent{
+		urls:     GetEnvAsSlice("URLS", []string{}, ","),
+		interval: time.Duration(GetEnvAsInt("INTERVAL", 5000)) * time.Millisecond,
+		timeout:  time.Duration(GetEnvAsInt("TIMEOUT", 5000)) * time.Millisecond,
+		queue:    GetEnv("QUEUE_NAME", "urlstats"),
+		mq:       mq,
+		logger:   log.New(os.Stdout, "agent: ", log.LstdFlags),
+	}, nil
+}
+
 // New create a new `Agent` and return a pointer to it
-func New(urls []URL, windowSize int, interval,
-	timeout time.Duration, queue string, mq messaging.MessageQueue) *Agent {
+func New(urls []URL, interval, timeout time.Duration,
+	queue string, mq messaging.MessageQueue) *Agent {
 	return &Agent{
 		urls:     urls,
 		interval: interval,

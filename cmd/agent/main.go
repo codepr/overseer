@@ -33,12 +33,20 @@ import (
 )
 
 func main() {
-	var configPath string
-	flag.StringVar(&configPath, "conf", "./conf.yaml", "Configuration YAML path")
+	var (
+		configPath string
+		overseer   *agent.Agent
+		err        error
+	)
+	flag.StringVar(&configPath, "conf", "", "Configuration YAML path")
 	flag.Parse()
-	agent, err := agent.NewFromConfig(configPath)
+	if configPath != "" {
+		overseer, err = agent.NewFromConfig(configPath)
+	} else {
+		overseer, err = agent.NewFromEnv()
+	}
 	if err != nil {
 		panic(err)
 	}
-	agent.Run()
+	overseer.Run()
 }

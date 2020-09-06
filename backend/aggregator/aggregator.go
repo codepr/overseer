@@ -62,7 +62,7 @@ type Aggregator struct {
 }
 
 // NewAggregator create a new `Aggregator` object
-func NewAggregator() *Aggregator {
+func New() *Aggregator {
 	mq, _ := messaging.Connect("amqp://guest:guest@localhost:5672/")
 	return &Aggregator{
 		servers:    make(map[URL]*serverStats),
@@ -70,6 +70,20 @@ func NewAggregator() *Aggregator {
 		mq:         mq,
 		logger:     log.New(os.Stdout, "aggregator: ", log.LstdFlags),
 	}
+}
+
+// NewFromEnv create a new `Aggregator` by reading key values from environment
+func NewFromEnv() (*Aggregator, error) {
+	mq, err := messaging.Connect(GetEnv("QUEUE_ADDR",
+		"amqp://guest:guest@localhost:5672/"))
+	if err != nil {
+		return nil, err
+	}
+	return &Aggregator{
+		windowSize: GetEnvAsInt("WINDOW_SIZE", 120),
+		mq:         mq,
+		logger:     log.New(os.Stdout, "aggregator: ", log.LstdFlags),
+	}, nil
 }
 
 // Run start the consume process from the message queue and aggregation of

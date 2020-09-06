@@ -31,6 +31,9 @@ import (
 )
 
 func main() {
-	aggregator := aggregator.NewAggregator()
+	aggregator, err := aggregator.NewFromEnv()
+	if err != nil {
+		panic(err)
+	}
 	aggregator.Run()
 }
