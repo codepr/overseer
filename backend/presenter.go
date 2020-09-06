@@ -38,11 +38,14 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// Gorilla websocket upgrader for HTTP endpoints
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 }
 
+// wsEndpoint is an HTTP route that converts connected clients to websocket
+// connections, streaming record stats coming from RabbitMQ
 func wsEndpoint(events <-chan []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		upgrader.CheckOrigin = func(r *http.Request) bool { return true }
@@ -51,6 +54,7 @@ func wsEndpoint(events <-chan []byte) http.HandlerFunc {
 			log.Println(err)
 		}
 
+		// Push events from channel directly to the connected client
 		for {
 			event := <-events
 			if err := ws.WriteMessage(websocket.TextMessage, event); err != nil {
@@ -62,16 +66,23 @@ func wsEndpoint(events <-chan []byte) http.HandlerFunc {
 	}
 }
 
-func Run(addr string) {
+// Run start consuming the RabbitMQ and run the HTTP server serving `ws_stats`
+// as the only route available
+func Run(listenAddr, queueAddr, queueName string) {
 	events := make(chan []byte)
-	queue, err := messaging.Connect("amqp://guest:guest@localhost:5672")
+	queue, err := messaging.Connect(queueAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer queue.Close()
+
+	// Add websocket route
 	http.HandleFunc("/ws_stats", wsEndpoint(events))
 
+	// Consume records from RabbitMQ pushing them to `events` channel
 	go func() {
-		queue.Consume("stats", 1, events)
+		queue.Consume(queueName, 1, events)
 	}()
-	log.Fatal(http.ListenAndServe(addr, nil))
+
+	log.Fatal(http.ListenAndServe(listenAddr, nil))
 }
