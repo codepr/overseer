@@ -26,7 +26,7 @@
 
 // Package backend contains all backend related modules and utilies to perform
 // aggregations and analysis of incoming server statistics
-package backend
+package aggregator
 
 import (
 	"testing"

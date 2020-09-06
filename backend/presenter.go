@@ -24,34 +24,54 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Package internal contains all utilities and inner library features, not
-// meant to be exported outside for the client
-package internal
+// Package backend contains all backend related modules and utilies to perform
+// aggregations and analysis of incoming server statistics and middleware to
+// forward it to front-end clients
+package backend
 
 import (
-	"encoding/json"
-	"time"
+	"log"
+	"net/http"
+
+	"github.com/codepr/overseer/internal/messaging"
+
+	"github.com/gorilla/websocket"
 )
 
-type URL = string
-
-// ServerStatus defines the current state of a monitored server, URL to
-// identify it, alive status, response time of the last request along with the
-// status code and content
-type ServerStatus struct {
-	Url             URL           `json:"url"`
-	Alive           bool          `json:"alive"`
-	ResponseTime    time.Duration `json:"response_time"`
-	ResponseStatus  int           `json:"response_status"`
-	ResponseContent string        `json:"response_content"`
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
 }
 
-// Stats holds the collected stats for each server ready to be dispatched to a
-// front-end client
-type Stats struct {
-	Url             URL           `json:"url"`
-	Alive           bool          `json:"alive"`
-	AvgResponseTime time.Duration `json:"avg_response_time"`
-	Availability    float64       `json:"availability"`
-	StatusCodes     map[int]int   `json:"status_codes"`
+func wsEndpoint(events <-chan []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		upgrader.CheckOrigin = func(r *http.Request) bool { return true }
+		ws, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Println(err)
+		}
+
+		for {
+			event := <-events
+			if err := ws.WriteMessage(websocket.TextMessage, event); err != nil {
+				log.Println(err)
+				return
+			}
+
+		}
+	}
+}
+
+func Run(addr string) {
+	events := make(chan []byte)
+	queue, err := messaging.Connect("amqp://guest:guest@localhost:5672")
+	if err != nil {
+		log.Fatal(err)
+	}
+	http.HandleFunc("/ws_stats", wsEndpoint(events))
+
+	go func() {
+		queue.Consume("stats", 1, events)
+	}()
+	log.Fatal(http.ListenAndServe(addr, nil))
 }

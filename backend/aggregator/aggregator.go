@@ -24,9 +24,9 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Package backend contains all backend related modules and utilies to perform
+// Package aggreation contains all backend related modules and utilies to perform
 // aggregations and analysis of incoming server statistics
-package backend
+package aggregator
 
 import (
 	"context"
@@ -122,6 +122,20 @@ func (a *Aggregator) Run() {
 					stats.LatestResponseTime, stats.MovingAverageStats.Min(),
 					stats.MovingAverageStats.Max(), stats.MovingAverageStats.Mean(),
 					stats.ResponseStatusMap)
+				// Send stats to presenter
+				presenterStats := Stats{
+					Url:             url,
+					Alive:           stats.Alive,
+					AvgResponseTime: stats.MovingAverageStats.Mean(),
+					Availability:    stats.Availability,
+					StatusCodes:     stats.ResponseStatusMap,
+				}
+				payload, err := json.Marshal(presenterStats)
+				if err != nil {
+					a.logger.Println("Unable to marshal presenter stats")
+					continue
+				}
+				a.mq.Produce("stats", payload)
 			case <-ctx.Done():
 				return
 			}

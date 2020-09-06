@@ -27,10 +27,10 @@
 package main
 
 import (
-	"github.com/codepr/overseer/backend"
+	"github.com/codepr/overseer/backend/aggregator"
 )
 
 func main() {
-	aggregator := backend.NewAggregator()
+	aggregator := aggregator.NewAggregator()
 	aggregator.Run()
 }
