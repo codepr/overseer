@@ -1,0 +1,47 @@
+version: "3.4"
+
+services:
+    agent:
+        build:
+            context: .
+            dockerfile: Dockerfile.agent
+            # network: host
+        container_name: agent
+        restart: always
+        depends_on:
+            - rabbitmq
+        environment:
+            URLS: "google.com,yahoo.com"
+            QUEUE_ADDR: "amqp://guest:guest@rabbitmq"
+
+    aggregator:
+        build:
+            context: .
+            dockerfile: Dockerfile.aggregator
+            # network: host
+        container_name: aggregator
+        restart: always
+        depends_on:
+            - rabbitmq
+        environment:
+            QUEUE_ADDR: "amqp://guest:guest@rabbitmq"
+
+    presenter:
+        build:
+            context: .
+            dockerfile: Dockerfile.presenter
+            # network: host
+        container_name: presenter
+        restart: always
+        depends_on:
+            - rabbitmq
+        environment:
+            QUEUE_ADDR: "amqp://guest:guest@rabbitmq"
+        ports:
+            - "17657:17657"
+
+    rabbitmq:
+        image: rabbitmq
+        container_name: rabbitmq
+        expose:
+            - 5672

@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+    <head>
+    </head>
+    <body>
+        <h1>Stats:</h1>
+        <div id="url"></div>
+        <div id="alive"></div>
+        <div id="avg_response_time"></div>
+        <div id="availability"></div>
+        <div id="status_codes"></div>
+        <script type="text/javascript">
+            var url = document.getElementById("url");
+            var alive = document.getElementById("alive");
+            var avg_response_time = document.getElementById("avg_response_time");
+            var availability = document.getElementById("availability");
+            var status_codes = document.getElementById("status_codes");
+
+            var exampleSocket = new WebSocket("ws://localhost:17657/ws_stats")
+
+            var update = function(){
+              exampleSocket.onmessage = function (event) {
+                  var data = JSON.parse(event.data);
+                  console.log(data);
+                  url.textContent = data.url
+                  alive.textContent = data.alive
+                  avg_response_time.textContent = data.avg_response_time
+                  availability.textContent = data.availability
+                  status_codes.textContent = data.status_codes
+              }
+            };
+            window.setTimeout(update);
+      </script>
+   </body>
+</html>
