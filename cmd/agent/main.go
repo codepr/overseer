@@ -30,6 +30,7 @@ import (
 	"flag"
 
 	"github.com/codepr/overseer/agent"
+	"github.com/codepr/overseer/internal"
 )
 
 func main() {
@@ -41,6 +42,9 @@ func main() {
 	flag.StringVar(&configPath, "conf", "", "Configuration YAML path")
 	flag.Parse()
 	if configPath != "" {
+		if err := internal.ValidateConfigPath(configPath); err != nil {
+			panic(err)
+		}
 		overseer, err = agent.NewFromConfig(configPath)
 	} else {
 		overseer, err = agent.NewFromEnv()

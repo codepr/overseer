@@ -115,7 +115,7 @@ func NewFromEnv() (*Agent, error) {
 		urls:     GetEnvAsSlice("URLS", []string{}, ","),
 		interval: time.Duration(GetEnvAsInt("INTERVAL", 5000)) * time.Millisecond,
 		timeout:  time.Duration(GetEnvAsInt("TIMEOUT", 5000)) * time.Millisecond,
-		queue:    GetEnv("QUEUE_NAME", "urlstats"),
+		queue:    GetEnv("QUEUE_NAME", "urlstatus"),
 		mq:       mq,
 		logger:   log.New(os.Stdout, "agent: ", log.LstdFlags),
 	}, nil
@@ -156,7 +156,7 @@ func (a *Agent) Run() {
 			for {
 				select {
 				case url := <-urlChan:
-					status, _ := probeServer(url)
+					status := probeServer(url)
 					// Encode the status retrieved from the HTTP healthcheck
 					// call and send it into the AMQP queue to the aggregator
 					// service
@@ -197,7 +197,7 @@ func (a *Agent) Run() {
 
 // probeServer perform an HTTP GET request to an URL, tracking response time
 // status code and content
-func probeServer(url URL) (*ServerStatus, error) {
+func probeServer(url URL) *ServerStatus {
 	status := &ServerStatus{Url: url, Alive: true}
 	// Clock the response time
 	start := time.Now()
@@ -219,5 +219,5 @@ func probeServer(url URL) (*ServerStatus, error) {
 		status.ResponseStatus = res.StatusCode
 	}
 	status.ResponseTime = elapsed
-	return status, nil
+	return status
 }

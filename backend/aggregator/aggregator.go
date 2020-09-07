@@ -80,6 +80,7 @@ func NewFromEnv() (*Aggregator, error) {
 		return nil, err
 	}
 	return &Aggregator{
+		servers:    make(map[URL]*serverStats),
 		windowSize: GetEnvAsInt("WINDOW_SIZE", 120),
 		mq:         mq,
 		logger:     log.New(os.Stdout, "aggregator: ", log.LstdFlags),
