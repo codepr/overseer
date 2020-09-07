@@ -5,20 +5,18 @@ services:
         build:
             context: .
             dockerfile: Dockerfile.agent
-            # network: host
         container_name: agent
         restart: always
         depends_on:
             - rabbitmq
         environment:
-            URLS: "google.com,yahoo.com"
+            # URLS: "webserver-1,webserver-2"  # specify here target servers to monitor
             QUEUE_ADDR: "amqp://guest:guest@rabbitmq"
 
     aggregator:
         build:
             context: .
             dockerfile: Dockerfile.aggregator
-            # network: host
         container_name: aggregator
         restart: always
         depends_on:
@@ -30,7 +28,6 @@ services:
         build:
             context: .
             dockerfile: Dockerfile.presenter
-            # network: host
         container_name: presenter
         restart: always
         depends_on:
