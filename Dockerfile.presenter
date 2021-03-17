@@ -1,8 +1,9 @@
 FROM golang:1.15.1-alpine3.12 AS builder
-ADD . /overseer/
 WORKDIR /overseer
 RUN mkdir build
+COPY go.mod go.sum ./
 RUN go mod download
+COPY . .
 RUN go build -o build ./...
 
 FROM alpine:latest
